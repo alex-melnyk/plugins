@@ -114,11 +114,27 @@ public class ResolutionFeature extends CameraFeature<ResolutionPreset> {
     if (preset.ordinal() > ResolutionPreset.high.ordinal()) {
       preset = ResolutionPreset.high;
     }
+    if (Build.VERSION.SDK_INT >= 31) {
+      EncoderProfiles profile =
+          getBestAvailableCamcorderProfileForResolutionPreset(cameraId, preset);
+      List<EncoderProfiles.VideoProfile> videoProfiles = profile.getVideoProfiles();
 
-    @SuppressWarnings("deprecation")
-    CamcorderProfile profile =
-        getBestAvailableCamcorderProfileForResolutionPresetLegacy(cameraId, preset);
-    return new Size(profile.videoFrameWidth, profile.videoFrameHeight);
+      if (videoProfiles == null || videoProfiles.isEmpty()) {
+        //Fallback to legacy
+        @SuppressWarnings("deprecation")
+        CamcorderProfile legacyProfile =
+                getBestAvailableCamcorderProfileForResolutionPresetLegacy(cameraId, preset);
+        return new Size(legacyProfile.videoFrameWidth, legacyProfile.videoFrameHeight);
+      }
+
+      EncoderProfiles.VideoProfile defaultVideoProfile = videoProfiles.get(0);
+      return new Size(defaultVideoProfile.getWidth(), defaultVideoProfile.getHeight());
+    } else {
+      @SuppressWarnings("deprecation")
+      CamcorderProfile profile =
+          getBestAvailableCamcorderProfileForResolutionPresetLegacy(cameraId, preset);
+      return new Size(profile.videoFrameWidth, profile.videoFrameHeight);
+    }
   }
 
   /**
@@ -189,31 +205,31 @@ public class ResolutionFeature extends CameraFeature<ResolutionPreset> {
         // All of these cases deliberately fall through to get the best available profile.
       case max:
         if (CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_HIGH)) {
-          return CamcorderProfile.getAll(cameraIdString, CamcorderProfile.QUALITY_HIGH);
+          return CamcorderProfileOverride.getAll(cameraIdString, CamcorderProfile.QUALITY_HIGH);
         }
       case ultraHigh:
         if (CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_2160P)) {
-          return CamcorderProfile.getAll(cameraIdString, CamcorderProfile.QUALITY_2160P);
+          return CamcorderProfileOverride.getAll(cameraIdString, CamcorderProfile.QUALITY_2160P);
         }
       case veryHigh:
         if (CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_1080P)) {
-          return CamcorderProfile.getAll(cameraIdString, CamcorderProfile.QUALITY_1080P);
+          return CamcorderProfileOverride.getAll(cameraIdString, CamcorderProfile.QUALITY_1080P);
         }
       case high:
         if (CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_720P)) {
-          return CamcorderProfile.getAll(cameraIdString, CamcorderProfile.QUALITY_720P);
+          return CamcorderProfileOverride.getAll(cameraIdString, CamcorderProfile.QUALITY_720P);
         }
       case medium:
         if (CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_480P)) {
-          return CamcorderProfile.getAll(cameraIdString, CamcorderProfile.QUALITY_480P);
+          return CamcorderProfileOverride.getAll(cameraIdString, CamcorderProfile.QUALITY_480P);
         }
       case low:
         if (CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_QVGA)) {
-          return CamcorderProfile.getAll(cameraIdString, CamcorderProfile.QUALITY_QVGA);
+          return CamcorderProfileOverride.getAll(cameraIdString, CamcorderProfile.QUALITY_QVGA);
         }
       default:
         if (CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_LOW)) {
-          return CamcorderProfile.getAll(cameraIdString, CamcorderProfile.QUALITY_LOW);
+          return CamcorderProfileOverride.getAll(cameraIdString, CamcorderProfile.QUALITY_LOW);
         }
 
         throw new IllegalArgumentException(
@@ -227,28 +243,54 @@ public class ResolutionFeature extends CameraFeature<ResolutionPreset> {
       return;
     }
 
-// TEMP FIX
-// getBestAvailableCamcorderProfileForResolutionPreset uses CamcorderProfile.getAll which is returns
-// a broken profile instance later invocation of recordingProfile.getVideoProfiles(); returns
-// a list of null values.
-//
-//    if (Build.VERSION.SDK_INT >= 31) {
-//      recordingProfile =
-//          getBestAvailableCamcorderProfileForResolutionPreset(cameraId, resolutionPreset);
-//      List<EncoderProfiles.AudioProfile> audioProfiles = recordingProfile.getAudioProfiles();
-//      List<EncoderProfiles.VideoProfile> videoProfiles = recordingProfile.getVideoProfiles();
-//
-//      EncoderProfiles.VideoProfile defaultVideoProfile = videoProfiles.get(0);
-//      captureSize = new Size(defaultVideoProfile.getWidth(), defaultVideoProfile.getHeight());
-//    } else {
-    @SuppressWarnings("deprecation")
-    CamcorderProfile camcorderProfile =
-        getBestAvailableCamcorderProfileForResolutionPresetLegacy(cameraId, resolutionPreset);
-    recordingProfileLegacy = camcorderProfile;
-    captureSize =
-        new Size(recordingProfileLegacy.videoFrameWidth, recordingProfileLegacy.videoFrameHeight);
-//    }
+    if (Build.VERSION.SDK_INT >= 31) {
+      recordingProfile =
+          getBestAvailableCamcorderProfileForResolutionPreset(cameraId, resolutionPreset);
+      List<EncoderProfiles.VideoProfile> videoProfiles = recordingProfile.getVideoProfiles();
+
+      if (videoProfiles == null || videoProfiles.isEmpty()) {
+        //Fallback to legacy
+        recordingProfile = null;
+        @SuppressWarnings("deprecation")
+        CamcorderProfile camcorderProfile =
+            getBestAvailableCamcorderProfileForResolutionPresetLegacy(cameraId, resolutionPreset);
+        recordingProfileLegacy = camcorderProfile;
+        captureSize =
+            new Size(recordingProfileLegacy.videoFrameWidth, recordingProfileLegacy.videoFrameHeight);
+      }
+
+      EncoderProfiles.VideoProfile defaultVideoProfile = videoProfiles.get(0);
+      captureSize = new Size(defaultVideoProfile.getWidth(), defaultVideoProfile.getHeight());
+    } else {
+      @SuppressWarnings("deprecation")
+      CamcorderProfile camcorderProfile =
+          getBestAvailableCamcorderProfileForResolutionPresetLegacy(cameraId, resolutionPreset);
+      recordingProfileLegacy = camcorderProfile;
+      captureSize =
+          new Size(recordingProfileLegacy.videoFrameWidth, recordingProfileLegacy.videoFrameHeight);
+    }
 
     previewSize = computeBestPreviewSize(cameraId, resolutionPreset);
   }
+}
+
+
+class CamcorderProfileOverride {
+  public static EncoderProfiles getAll(String cameraId, int quality) {
+    final EncoderProfiles profiles = CamcorderProfile.getAll(cameraId, quality);
+    if (profiles == null) {
+      //Try to force advanced == false
+      int id;
+      try {
+        id = Integer.valueOf(cameraId);
+      } catch (NumberFormatException e) {
+        return null;
+      }
+      return native_get_camcorder_profiles(id, quality, false);
+    }
+    return profiles;
+  }
+
+  private static native final EncoderProfiles native_get_camcorder_profiles(
+          int cameraId, int quality, boolean advanced);
 }
